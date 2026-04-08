@@ -1,0 +1,3 @@
+title,year,author,tags,owned/not owned,read/unread,rating
+Test Insert 1, 2005, Test Author, "Classics; Sci-fi", owned, read, 4
+Test Insert 2, 2003, Test Author 2, "Classics", not owned, unread, 3
