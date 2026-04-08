@@ -1,30 +1,18 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { jsonError, requireApiUser } from "@/lib/api/route";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createServerSupabaseClient();
+        const auth = await requireApiUser();
+        if (auth.response) return auth.response;
 
-        const {
-            data: { user },
-            error: authError,
-        } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 },
-            );
-        }
+        const { supabase, user } = auth;
 
         const body = await request.json();
         const name = String(body?.name ?? "").trim();
 
         if (!name) {
-            return NextResponse.json(
-                { error: "List name is required." },
-                { status: 400 },
-            );
+            return jsonError("List name is required.", 400);
         }
 
         const { data: existingLists, error: countError } = await supabase
@@ -35,10 +23,7 @@ export async function POST(request: NextRequest) {
             .limit(1);
 
         if (countError) {
-            return NextResponse.json(
-                { error: countError.message },
-                { status: 500 },
-            );
+            return jsonError(countError.message, 500);
         }
 
         const nextSortOrder =
@@ -57,16 +42,13 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (insertError) {
-            return NextResponse.json(
-                { error: insertError.message },
-                { status: 500 },
-            );
+            return jsonError(insertError.message, 500);
         }
 
         return NextResponse.json({ list }, { status: 201 });
     } catch (error) {
         const message =
             error instanceof Error ? error.message : "Unexpected server error.";
-        return NextResponse.json({ error: message }, { status: 500 });
+        return jsonError(message, 500);
     }
 }

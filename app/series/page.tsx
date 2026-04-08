@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { DeleteSeriesButton } from "@/components/series/DeleteSeriesButton";
 import { SeriesProgressStatus, SeriesProgressRow } from "@/types/types";
@@ -53,12 +53,7 @@ function getProgressPercentage(series: SeriesProgressRow) {
 async function createSeries(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const name = String(formData.get("name") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
@@ -82,12 +77,7 @@ async function createSeries(formData: FormData) {
 async function deleteSeries(seriesId: string) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const { error: linkError } = await supabase
         .from("series_books")
@@ -113,17 +103,13 @@ async function deleteSeries(seriesId: string) {
 }
 
 export default async function SeriesPage() {
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const { data: seriesProgress } = await supabase
         .from("series_progress")
         .select("*")
         .eq("user_id", user.id)
+        .gt("total_required_books", 0)
         .order("series_name", { ascending: true })
         .returns<SeriesProgressRow[]>();
 

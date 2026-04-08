@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { replaceBookTags } from "@/lib/books/saveTags";
 import {
     Card,
@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { TagInput } from "@/components/books/TagInput";
 import { replaceBookAuthors } from "@/lib/books/saveAuthors";
+import { parseBookFormData } from "@/lib/books/formData";
+import { BookDetailsFields } from "@/components/books/BookDetailsFields";
 
 function parseCsvLine(line: string): string[] {
     const result: string[] = [];
@@ -68,24 +68,16 @@ function parseRead(value: string): boolean {
 async function createBook(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
+    const { supabase, user } = await requireAppContext();
 
     const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const title = String(formData.get("title") ?? "").trim();
-    const publicationYearRaw = String(
-        formData.get("publication_year") ?? "",
-    ).trim();
-    const personalRatingRaw = String(
-        formData.get("personal_rating") ?? "",
-    ).trim();
-    const privateNotes = String(formData.get("private_notes") ?? "").trim();
-    const rawTags = String(formData.get("tags") ?? "").trim();
-    const rawAuthors = String(formData.get("authors") ?? "").trim();
+        title,
+        publicationYear,
+        personalRating,
+        privateNotes,
+        rawTags,
+        rawAuthors,
+    } = parseBookFormData(formData);
 
     if (!title) return;
 
@@ -94,13 +86,9 @@ async function createBook(formData: FormData) {
         .insert({
             user_id: user.id,
             title,
-            publication_year: publicationYearRaw
-                ? Number(publicationYearRaw)
-                : null,
-            personal_rating: personalRatingRaw
-                ? Number(personalRatingRaw)
-                : null,
-            private_notes: privateNotes || null,
+            publication_year: publicationYear,
+            personal_rating: personalRating,
+            private_notes: privateNotes,
         })
         .select("id")
         .single();
@@ -129,13 +117,7 @@ async function createBook(formData: FormData) {
 async function uploadBooksCsv(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const file = formData.get("csv_file");
     if (!(file instanceof File) || file.size === 0) {
@@ -263,12 +245,7 @@ async function uploadBooksCsv(formData: FormData) {
 }
 
 export default async function NewBookPage() {
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    await requireAppContext();
 
     return (
         <AppShell
@@ -281,67 +258,7 @@ export default async function NewBookPage() {
                     </CardHeader>
                     <CardContent>
                         <form action={createBook} className="grid gap-5">
-                            <div className="grid gap-2">
-                                <Label htmlFor="title">Title</Label>
-                                <Input id="title" name="title" required />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="authors">Authors</Label>
-                                <TagInput
-                                    name="authors"
-                                    initialTags={[]}
-                                    placeholder="Type an author and press comma"
-                                />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="publication_year">
-                                    Publication year
-                                </Label>
-                                <Input
-                                    id="publication_year"
-                                    name="publication_year"
-                                    inputMode="numeric"
-                                />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="personal_rating">Rating</Label>
-                                <select
-                                    id="personal_rating"
-                                    name="personal_rating"
-                                    defaultValue=""
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                    <option value="">No rating</option>
-                                    <option value="0.5">0.5</option>
-                                    <option value="1">1</option>
-                                    <option value="1.5">1.5</option>
-                                    <option value="2">2</option>
-                                    <option value="2.5">2.5</option>
-                                    <option value="3">3</option>
-                                    <option value="3.5">3.5</option>
-                                    <option value="4">4</option>
-                                    <option value="4.5">4.5</option>
-                                    <option value="5">5</option>
-                                </select>
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="tags">Tags</Label>
-                                <TagInput name="tags" initialTags={[]} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="private_notes">
-                                    Private notes
-                                </Label>
-                                <Textarea
-                                    id="private_notes"
-                                    name="private_notes"
-                                    rows={6}
-                                />
-                            </div>
+                            <BookDetailsFields ratingVariant="select" />
 
                             <Button type="submit" className="w-full sm:w-fit">
                                 Save book
@@ -381,8 +298,8 @@ export default async function NewBookPage() {
                                     owned,read/unread,rating
                                 </code>
                                 <code className="mt-2 block whitespace-pre-wrap rounded-xl bg-background p-3 text-xs">
-                                    The Hobbit,1937,J.R.R. Tolkien,"Fantasy;
-                                    Classics",owned,read,5
+                                    The Hobbit,1937,J.R.R. Tolkien,&quot;Fantasy;
+                                    Classics&quot;,owned,read,5
                                 </code>
                             </div>
 

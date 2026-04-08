@@ -1,36 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { jsonError, requireApiUser } from "@/lib/api/route";
 
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
     const { id: seriesId } = await params;
-    const { entries } = await request.json();
+    const body = await request.json();
+    const entries = body?.entries as
+        | Array<{ id: string; chronology_index: number }>
+        | undefined;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!Array.isArray(entries)) {
+        return jsonError("entries is required.", 400);
     }
 
-    for (const entry of entries as Array<{
-        id: string;
-        chronology_index: number;
-    }>) {
-        const { error } = await supabase
-            .from("series_books")
-            .update({ chronology_index: entry.chronology_index })
-            .eq("id", entry.id)
-            .eq("series_id", seriesId)
-            .eq("user_id", user.id);
+    const auth = await requireApiUser();
+    if (auth.response) return auth.response;
 
-        if (error) {
-            return NextResponse.json({ error: error.message }, { status: 400 });
-        }
+    const { supabase, user } = auth;
+
+    const updates = await Promise.all(
+        entries.map(async (entry) =>
+            supabase
+                .from("series_books")
+                .update({ chronology_index: entry.chronology_index })
+                .eq("id", entry.id)
+                .eq("series_id", seriesId)
+                .eq("user_id", user.id),
+        ),
+    );
+
+    const failedUpdate = updates.find((update) => update.error);
+    if (failedUpdate?.error) {
+        return jsonError(failedUpdate.error.message, 400);
     }
 
     return NextResponse.json({ ok: true });

@@ -4,19 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { TagColourRow } from "@/components/settings/TagColourRow";
 
 async function updateProfile(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const displayName = String(formData.get("display_name") ?? "").trim();
 
@@ -31,13 +25,7 @@ async function updateProfile(formData: FormData) {
 async function deleteTag(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const tagId = String(formData.get("tag_id") ?? "");
 
@@ -65,13 +53,7 @@ async function deleteTag(formData: FormData) {
 async function updateTagColour(formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const tagId = String(formData.get("tag_id") ?? "");
     const color = String(formData.get("color") ?? "").trim();
@@ -92,13 +74,7 @@ async function updateTagColour(formData: FormData) {
 }
 
 export default async function SettingsPage() {
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const [{ data: profile }, { data: tags }] = await Promise.all([
         supabase

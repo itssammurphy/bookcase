@@ -33,7 +33,19 @@ function getAutoTagColour(tagName: string) {
 }
 
 export function parseTagInput(raw: string): string[] {
-    return [...new Set(raw.split(",").map(normaliseTagName).filter(Boolean))];
+    const deduped = new Map<string, string>();
+
+    for (const value of raw.split(",")) {
+        const tagName = normaliseTagName(value);
+        if (!tagName) continue;
+
+        const key = tagName.toLowerCase();
+        if (!deduped.has(key)) {
+            deduped.set(key, tagName);
+        }
+    }
+
+    return [...deduped.values()];
 }
 
 export async function replaceBookTags(params: {
@@ -56,22 +68,36 @@ export async function replaceBookTags(params: {
 
     if (tagNames.length === 0) return;
 
-    for (const name of tagNames) {
-        const { data: existing } = await supabase
-            .from("tags")
-            .select("id")
-            .eq("user_id", userId)
-            .eq("name", name)
-            .maybeSingle();
+    const { data: existingTags, error: existingError } = await supabase
+        .from("tags")
+        .select("id,name")
+        .eq("user_id", userId)
+        .in("name", tagNames);
 
-        if (!existing) {
-            const { error } = await supabase.from("tags").insert({
+    if (existingError) throw new Error(existingError.message);
+
+    const existingNames = new Set(
+        (existingTags ?? []).map((tag) => tag.name.toLowerCase()),
+    );
+
+    const missingTagNames = tagNames.filter(
+        (name) => !existingNames.has(name.toLowerCase()),
+    );
+
+    if (missingTagNames.length > 0) {
+        const { error: insertMissingError } = await supabase.from("tags").insert(
+            missingTagNames.map((name) => ({
                 user_id: userId,
                 name,
                 color: getAutoTagColour(name),
-            });
+            })),
+        );
 
-            if (error) throw new Error(error.message);
+        if (
+            insertMissingError &&
+            insertMissingError.code !== "23505"
+        ) {
+            throw new Error(insertMissingError.message);
         }
     }
 

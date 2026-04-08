@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { AuthorCard } from "@/components/authors/AuthorCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,17 +13,13 @@ export default async function AuthorsPage({ searchParams }: AuthorsPageProps) {
     const sort = params.sort === "book_count" ? "book_count" : "name";
     const page = Math.max(Number(params.page ?? "1") || 1, 1);
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     let query = supabase
         .from("author_stats")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .gt("total_books", 0);
 
     if (sort === "book_count") {
         query = query

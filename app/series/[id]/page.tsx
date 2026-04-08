@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { SeriesDetailClient } from "@/components/series/SeriesDetailClient";
 import { DeleteSeriesButton } from "@/components/series/DeleteSeriesButton";
@@ -12,22 +12,13 @@ export default async function SeriesDetailPage({
 }: SeriesDetailPageProps) {
     const { id } = await params;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     async function deleteSeries() {
         "use server";
 
-        const actionSupabase = await createServerSupabaseClient();
-        const {
-            data: { user: actionUser },
-        } = await actionSupabase.auth.getUser();
-
-        if (!actionUser) redirect("/");
+        const { supabase: actionSupabase, user: actionUser } =
+            await requireAppContext();
 
         const { error: linkError } = await actionSupabase
             .from("series_books")

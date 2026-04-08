@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { jsonError, requireApiUser } from "@/lib/api/route";
 
 export async function DELETE(
     _request: Request,
@@ -11,14 +11,10 @@ export async function DELETE(
 ) {
     const { id: seriesId, entryId } = await params;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireApiUser();
+    if (auth.response) return auth.response;
 
-    if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { supabase, user } = auth;
 
     const { error } = await supabase
         .from("series_books")
@@ -28,7 +24,7 @@ export async function DELETE(
         .eq("user_id", user.id);
 
     if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+        return jsonError(error.message, 400);
     }
 
     return NextResponse.json({ ok: true });

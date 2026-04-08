@@ -1,43 +1,33 @@
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { replaceBookTags } from "@/lib/books/saveTags";
 import { replaceBookAuthors } from "@/lib/books/saveAuthors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { TagInput } from "@/components/books/TagInput";
-import { RatingInput } from "@/components/books/RatingInput";
 import { EditBookPageProps, ReadStatus } from "@/types/types";
-
-function todayIsoDate() {
-    return new Date().toISOString().slice(0, 10);
-}
+import { parseBookFormData } from "@/lib/books/formData";
+import { BookDetailsFields } from "@/components/books/BookDetailsFields";
+import {
+    markBookRead,
+    markBookReading,
+    markBookUnread,
+} from "@/app/books/actions";
 
 async function updateBook(bookId: string, formData: FormData) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
+    const { supabase, user } = await requireAppContext();
+
     const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const title = String(formData.get("title") ?? "").trim();
-    const publicationYearRaw = String(
-        formData.get("publication_year") ?? "",
-    ).trim();
-    const personalRatingRaw = String(
-        formData.get("personal_rating") ?? "",
-    ).trim();
-    const privateNotes = String(formData.get("private_notes") ?? "").trim();
-    const rawTags = String(formData.get("tags") ?? "").trim();
-    const rawAuthors = String(formData.get("authors") ?? "").trim();
-    const ownedRaw = String(formData.get("owned") ?? "false");
-    const owned = ownedRaw === "true";
+        title,
+        publicationYear,
+        personalRating,
+        privateNotes,
+        rawTags,
+        rawAuthors,
+        owned,
+    } = parseBookFormData(formData, { includeOwned: true });
 
     if (!title) return;
 
@@ -45,13 +35,9 @@ async function updateBook(bookId: string, formData: FormData) {
         .from("books")
         .update({
             title,
-            publication_year: publicationYearRaw
-                ? Number(publicationYearRaw)
-                : null,
-            personal_rating: personalRatingRaw
-                ? Number(personalRatingRaw)
-                : null,
-            private_notes: privateNotes || null,
+            publication_year: publicationYear,
+            personal_rating: personalRating,
+            private_notes: privateNotes,
             owned,
         })
         .eq("id", bookId)
@@ -81,12 +67,7 @@ async function updateBook(bookId: string, formData: FormData) {
 async function deleteBook(bookId: string) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const { error } = await supabase
         .from("books")
@@ -101,153 +82,10 @@ async function deleteBook(bookId: string) {
     redirect("/bookshelf");
 }
 
-async function markUnread(bookId: string) {
-    "use server";
-
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const { error } = await supabase
-        .from("book_reads")
-        .delete()
-        .eq("book_id", bookId)
-        .eq("user_id", user.id);
-
-    if (error) {
-        throw new Error(error.message);
-    }
-
-    redirect(`/books/${bookId}/edit`);
-}
-
-async function markReading(bookId: string) {
-    "use server";
-
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const { data: activeRead, error: activeReadError } = await supabase
-        .from("book_reads")
-        .select("id")
-        .eq("book_id", bookId)
-        .eq("user_id", user.id)
-        .is("finished_at", null)
-        .limit(1)
-        .maybeSingle();
-
-    if (activeReadError) {
-        throw new Error(activeReadError.message);
-    }
-
-    if (!activeRead) {
-        const { error } = await supabase.from("book_reads").insert({
-            user_id: user.id,
-            book_id: bookId,
-            started_at: todayIsoDate(),
-            finished_at: null,
-        });
-
-        if (error) {
-            throw new Error(error.message);
-        }
-    }
-
-    redirect(`/books/${bookId}/edit`);
-}
-
-async function markRead(bookId: string) {
-    "use server";
-
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const { data: activeRead, error: activeReadError } = await supabase
-        .from("book_reads")
-        .select("id")
-        .eq("book_id", bookId)
-        .eq("user_id", user.id)
-        .is("finished_at", null)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (activeReadError) {
-        throw new Error(activeReadError.message);
-    }
-
-    if (activeRead) {
-        const { error } = await supabase
-            .from("book_reads")
-            .update({
-                finished_at: todayIsoDate(),
-            })
-            .eq("id", activeRead.id)
-            .eq("user_id", user.id);
-
-        if (error) {
-            throw new Error(error.message);
-        }
-    } else {
-        const { error } = await supabase.from("book_reads").insert({
-            user_id: user.id,
-            book_id: bookId,
-            started_at: todayIsoDate(),
-            finished_at: todayIsoDate(),
-        });
-
-        if (error) {
-            throw new Error(error.message);
-        }
-    }
-
-    redirect(`/books/${bookId}/edit`);
-}
-
-async function markReread(bookId: string) {
-    "use server";
-
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
-
-    const { error } = await supabase.from("book_reads").insert({
-        user_id: user.id,
-        book_id: bookId,
-        started_at: todayIsoDate(),
-        finished_at: todayIsoDate(),
-    });
-
-    if (error) {
-        throw new Error(error.message);
-    }
-
-    redirect(`/books/${bookId}/edit`);
-}
-
 export default async function EditBookPage({ params }: EditBookPageProps) {
     const { id } = await params;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const [{ data: book, error }, { data: reads, error: readsError }] =
         await Promise.all([
@@ -381,10 +219,13 @@ export default async function EditBookPage({ params }: EditBookPageProps) {
 
     const updateBookWithId = updateBook.bind(null, id);
     const deleteBookWithId = deleteBook.bind(null, id);
-    const markUnreadWithId = markUnread.bind(null, id);
-    const markReadingWithId = markReading.bind(null, id);
-    const markReadWithId = markRead.bind(null, id);
-    const markRereadWithId = markReread.bind(null, id);
+    const markUnreadWithId = markBookUnread.bind(null, id, `/books/${id}/edit`);
+    const markReadingWithId = markBookReading.bind(
+        null,
+        id,
+        `/books/${id}/edit`,
+    );
+    const markReadWithId = markBookRead.bind(null, id, `/books/${id}/edit`);
 
     return (
         <AppShell title="Edit book" subtitle="Update this library entry">
@@ -458,20 +299,13 @@ export default async function EditBookPage({ params }: EditBookPageProps) {
                                         </Button>
                                     </form>
 
-                                    <form action={markRereadWithId}>
-                                        <Button type="submit" variant="outline">
-                                            Reread
-                                        </Button>
-                                    </form>
                                 </div>
 
                                 <p className="text-xs text-muted-foreground">
                                     Use{" "}
                                     <span className="font-medium">Read</span> to
                                     finish a current read or mark the book as
-                                    completed. Use{" "}
-                                    <span className="font-medium">Reread</span>{" "}
-                                    to add another completed read.
+                                    completed.
                                 </p>
                             </div>
                         </div>
@@ -485,85 +319,16 @@ export default async function EditBookPage({ params }: EditBookPageProps) {
                 </CardHeader>
                 <CardContent>
                     <form action={updateBookWithId} className="grid gap-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="title">Title</Label>
-                            <Input
-                                id="title"
-                                name="title"
-                                required
-                                defaultValue={book.title}
-                            />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="authors">Authors</Label>
-                            <TagInput
-                                name="authors"
-                                initialTags={existingAuthors}
-                                placeholder="Type an author and press comma"
-                            />
-                        </div>
-
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            <div className="grid gap-2">
-                                <Label>Ownership</Label>
-                                <div className="flex flex-wrap gap-2">
-                                    <label className="flex items-center gap-2 rounded-full border px-3 py-2 text-sm">
-                                        <input
-                                            type="radio"
-                                            name="owned"
-                                            value="true"
-                                            defaultChecked={book.owned === true}
-                                        />
-                                        Owned
-                                    </label>
-
-                                    <label className="flex items-center gap-2 rounded-full border px-3 py-2 text-sm">
-                                        <input
-                                            type="radio"
-                                            name="owned"
-                                            value="false"
-                                            defaultChecked={
-                                                book.owned === false
-                                            }
-                                        />
-                                        Not owned
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="publication_year">
-                                    Publication year
-                                </Label>
-                                <Input
-                                    id="publication_year"
-                                    name="publication_year"
-                                    inputMode="numeric"
-                                    defaultValue={book.publication_year ?? ""}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="personal_rating">Rating</Label>
-                            <RatingInput initialValue={book.personal_rating} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="tags">Tags</Label>
-                            <TagInput name="tags" initialTags={existingTags} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="private_notes">Private notes</Label>
-                            <Textarea
-                                id="private_notes"
-                                name="private_notes"
-                                rows={6}
-                                defaultValue={book.private_notes ?? ""}
-                            />
-                        </div>
+                        <BookDetailsFields
+                            initialTitle={book.title}
+                            initialAuthors={existingAuthors}
+                            initialPublicationYear={book.publication_year}
+                            initialRating={book.personal_rating}
+                            initialTags={existingTags}
+                            initialPrivateNotes={book.private_notes}
+                            showOwnership
+                            isOwned={book.owned === true}
+                        />
 
                         <div className="flex flex-col gap-3 sm:flex-row">
                             <Button type="submit">Save changes</Button>

@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { jsonError, requireApiUser } from "@/lib/api/route";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
@@ -6,22 +6,12 @@ type RouteContext = {
 };
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-    console.log("HI");
     try {
         const { id } = await context.params;
-        const supabase = await createServerSupabaseClient();
+        const auth = await requireApiUser();
+        if (auth.response) return auth.response;
 
-        const {
-            data: { user },
-            error: authError,
-        } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 },
-            );
-        }
+        const { supabase, user } = auth;
 
         const { data: list, error: listError } = await supabase
             .from("custom_lists")
@@ -31,17 +21,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
             .maybeSingle();
 
         if (listError) {
-            return NextResponse.json(
-                { error: listError.message },
-                { status: 500 },
-            );
+            return jsonError(listError.message, 500);
         }
 
         if (!list) {
-            return NextResponse.json(
-                { error: "List not found." },
-                { status: 404 },
-            );
+            return jsonError("List not found.", 404);
         }
 
         const { error: deleteError } = await supabase
@@ -51,16 +35,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
             .eq("user_id", user.id);
 
         if (deleteError) {
-            return NextResponse.json(
-                { error: deleteError.message },
-                { status: 500 },
-            );
+            return jsonError(deleteError.message, 500);
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
         const message =
             error instanceof Error ? error.message : "Unexpected server error.";
-        return NextResponse.json({ error: message }, { status: 500 });
+        return jsonError(message, 500);
     }
 }

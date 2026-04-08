@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
     Card,
     CardContent,
@@ -8,53 +7,12 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { StarRating } from "@/components/books/StarRating";
+import { BookCard } from "@/components/books/BookCard";
+import { bookStatusStyles } from "@/components/books/bookStatus";
 import { DashboardBookRow, HomeStatsRow, TopTagRow } from "@/types/types";
-
-const statusStyles: Record<
-    DashboardBookRow["derived_status"],
-    { bar: string; bg: string; label: string; text: string; color: string }
-> = {
-    read: {
-        bar: "bg-emerald-500",
-        bg: "bg-emerald-50/50",
-        label: "Read",
-        text: "text-emerald-700",
-        color: "#10b981",
-    },
-    reading: {
-        bar: "bg-amber-500",
-        bg: "bg-amber-50/50",
-        label: "In progress",
-        text: "text-amber-700",
-        color: "#f59e0b",
-    },
-    unread: {
-        bar: "bg-slate-300",
-        bg: "bg-background",
-        label: "Unread",
-        text: "text-slate-500",
-        color: "#cbd5e1",
-    },
-};
-
-function getStatusCopy(book: DashboardBookRow) {
-    const base = statusStyles[book.derived_status].label;
-
-    if (book.derived_status === "read") {
-        if (book.reread_count > 0) {
-            return `${base} • ${book.reread_count} reread${
-                book.reread_count === 1 ? "" : "s"
-            }`;
-        }
-        return base;
-    }
-
-    return base;
-}
 
 function polarToCartesian(
     cx: number,
@@ -94,24 +52,24 @@ function StatusPieChart({ books }: { books: DashboardBookRow[] }) {
     const segments = [
         {
             key: "read",
-            label: statusStyles.read.label,
+            label: bookStatusStyles.read.label,
             value: books.filter((book) => book.derived_status === "read")
                 .length,
-            color: statusStyles.read.color,
+            color: bookStatusStyles.read.color,
         },
         {
             key: "reading",
-            label: statusStyles.reading.label,
+            label: "In progress",
             value: books.filter((book) => book.derived_status === "reading")
                 .length,
-            color: statusStyles.reading.color,
+            color: bookStatusStyles.reading.color,
         },
         {
             key: "unread",
-            label: statusStyles.unread.label,
+            label: bookStatusStyles.unread.label,
             value: books.filter((book) => book.derived_status === "unread")
                 .length,
-            color: statusStyles.unread.color,
+            color: bookStatusStyles.unread.color,
         },
     ].filter((segment) => segment.value > 0);
 
@@ -220,13 +178,7 @@ function StatusPieChart({ books }: { books: DashboardBookRow[] }) {
 }
 
 export default async function DashboardPage() {
-    const supabase = await createServerSupabaseClient();
-
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const [
         { data: profile },
@@ -374,69 +326,20 @@ export default async function DashboardPage() {
                         {readingBooks.length > 0 ? (
                             <div className="grid gap-3">
                                 {readingBooks.map((book) => {
-                                    const style =
-                                        statusStyles[book.derived_status];
-                                    const statusCopy = getStatusCopy(book);
-
                                     return (
-                                        <div
+                                        <BookCard
                                             key={book.id}
-                                            className={`flex overflow-hidden rounded-2xl border ${style.bg}`}>
-                                            <div
-                                                className={`w-1.5 shrink-0 ${style.bar}`}
-                                                aria-hidden="true"
-                                            />
-
-                                            <div className="flex-1 p-4">
-                                                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                                                    <div className="space-y-3">
-                                                        <div className="space-y-1">
-                                                            <p className="text-lg font-medium">
-                                                                {book.title}
-                                                            </p>
-                                                            <p
-                                                                className={`text-xs font-medium ${style.text}`}>
-                                                                {statusCopy}
-                                                            </p>
-                                                        </div>
-
-                                                        <p className="text-sm text-muted-foreground">
-                                                            {book.author_names ||
-                                                                "Unknown author"}
-                                                            {book.publication_year
-                                                                ? `, ${book.publication_year}`
-                                                                : ""}
-                                                        </p>
-
-                                                        {book.series_name ? (
-                                                            <p className="text-sm text-muted-foreground">
-                                                                Series:{" "}
-                                                                {
-                                                                    book.series_name
-                                                                }
-                                                            </p>
-                                                        ) : null}
-
-                                                        <StarRating
-                                                            rating={
-                                                                book.personal_rating
-                                                            }
-                                                        />
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2">
-                                                        <Button
-                                                            asChild
-                                                            variant="secondary">
-                                                            <Link
-                                                                href={`/books/${book.id}/edit`}>
-                                                                Continue
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            book={book}
+                                            showTags={false}
+                                            titleClassName="text-lg font-medium"
+                                            actionArea={
+                                                <Button asChild variant="secondary">
+                                                    <Link href={`/books/${book.id}/edit`}>
+                                                        Continue
+                                                    </Link>
+                                                </Button>
+                                            }
+                                        />
                                     );
                                 })}
                             </div>

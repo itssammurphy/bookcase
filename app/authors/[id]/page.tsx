@@ -9,7 +9,7 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { StarRating } from "@/components/books/StarRating";
 import {
     DerivedBookRow,
@@ -58,12 +58,7 @@ function getStatusCopy(book: DerivedBookRow) {
 async function deleteAuthor(authorId: string) {
     "use server";
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const { error: linkError } = await supabase
         .from("book_authors")
@@ -93,12 +88,7 @@ export default async function AuthorPage({
 }: AuthorIndividualPageProps) {
     const { id } = await params;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const [
         { data: author, error: authorError },

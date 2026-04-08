@@ -1,16 +1,10 @@
-import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { BookshelfClient } from "@/components/books/BookshelfClient";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAppContext } from "@/lib/supabase/appContext";
 import { BookRow, CustomList, Membership } from "@/types/types";
 
 export default async function BookshelfPage() {
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) redirect("/");
+    const { supabase, user } = await requireAppContext();
 
     const [{ data: books }, { data: lists }, { data: memberships }] =
         await Promise.all([

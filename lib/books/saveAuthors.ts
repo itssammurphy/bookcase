@@ -5,9 +5,19 @@ function normaliseAuthorName(name: string) {
 }
 
 export function parseAuthorInput(raw: string): string[] {
-    return [
-        ...new Set(raw.split(",").map(normaliseAuthorName).filter(Boolean)),
-    ];
+    const deduped = new Map<string, string>();
+
+    for (const value of raw.split(",")) {
+        const name = normaliseAuthorName(value);
+        if (!name) continue;
+
+        const key = name.toLowerCase();
+        if (!deduped.has(key)) {
+            deduped.set(key, name);
+        }
+    }
+
+    return [...deduped.values()];
 }
 
 export async function replaceBookAuthors(params: {
@@ -30,21 +40,35 @@ export async function replaceBookAuthors(params: {
 
     if (authorNames.length === 0) return;
 
-    for (const name of authorNames) {
-        const { data: existing } = await supabase
-            .from("authors")
-            .select("id")
-            .eq("user_id", userId)
-            .eq("name", name)
-            .maybeSingle();
+    const { data: existingAuthors, error: existingError } = await supabase
+        .from("authors")
+        .select("id, name")
+        .eq("user_id", userId)
+        .in("name", authorNames);
 
-        if (!existing) {
-            const { error } = await supabase.from("authors").insert({
+    if (existingError) throw new Error(existingError.message);
+
+    const existingNames = new Set(
+        (existingAuthors ?? []).map((author) => author.name.toLowerCase()),
+    );
+
+    const missingAuthorNames = authorNames.filter(
+        (name) => !existingNames.has(name.toLowerCase()),
+    );
+
+    if (missingAuthorNames.length > 0) {
+        const { error: insertMissingError } = await supabase.from("authors").insert(
+            missingAuthorNames.map((name) => ({
                 user_id: userId,
                 name,
-            });
+            })),
+        );
 
-            if (error) throw new Error(error.message);
+        if (
+            insertMissingError &&
+            insertMissingError.code !== "23505"
+        ) {
+            throw new Error(insertMissingError.message);
         }
     }
 

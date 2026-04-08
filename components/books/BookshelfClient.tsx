@@ -1,24 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ListPlus, Plus, Share2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { StarRating } from "@/components/books/StarRating";
-import { StatusMenu } from "@/components/books/StatusMenu";
+import { Card, CardContent } from "@/components/ui/card";
+import { BookshelfFiltersCard } from "@/components/bookshelf/BookshelfFiltersCard";
+import { BookshelfListHeader } from "@/components/bookshelf/BookshelfListHeader";
+import { BookshelfBooksList } from "@/components/bookshelf/BookshelfBooksList";
 import {
-    Pagination,
-    PaginationContent,
-    PaginationEllipsis,
-    PaginationItem,
-    PaginationLink,
-    PaginationNext,
-    PaginationPrevious,
-} from "@/components/ui/pagination";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    buildExportText,
+    buildPagination,
+    PAGE_SIZE_OPTIONS,
+    sortBooks,
+    type SortKey,
+} from "@/components/bookshelf/bookshelfUtils";
 import { BookRow, CustomList, Membership, Tag } from "@/types/types";
 
 type Props = {
@@ -26,131 +20,6 @@ type Props = {
     lists: CustomList[];
     memberships: Membership[];
 };
-
-type SortKey =
-    | "updated_desc"
-    | "title_asc"
-    | "title_desc"
-    | "author_asc"
-    | "rating_desc"
-    | "year_desc"
-    | "year_asc"
-    | "status";
-
-const PAGE_SIZE_OPTIONS = [12, 24, 48];
-
-const statusStyles: Record<
-    BookRow["derived_status"],
-    { bar: string; bg: string; label: string; text: string }
-> = {
-    read: {
-        bar: "bg-emerald-500",
-        bg: "bg-emerald-50/50",
-        label: "Read",
-        text: "text-emerald-700",
-    },
-    reading: {
-        bar: "bg-amber-500",
-        bg: "bg-amber-50/50",
-        label: "Reading",
-        text: "text-amber-700",
-    },
-    unread: {
-        bar: "bg-slate-300",
-        bg: "bg-background",
-        label: "Unread",
-        text: "text-slate-500",
-    },
-};
-
-const statusSortValue: Record<BookRow["derived_status"], number> = {
-    reading: 0,
-    unread: 1,
-    read: 2,
-};
-
-function getStatusCopy(book: BookRow) {
-    const base = statusStyles[book.derived_status].label;
-
-    if (book.reread_count > 0) {
-        return `${base} • ${book.reread_count} reread${
-            book.reread_count === 1 ? "" : "s"
-        }`;
-    }
-
-    return base;
-}
-
-function sortBooks(books: BookRow[], sortKey: SortKey) {
-    const next = [...books];
-
-    next.sort((a, b) => {
-        switch (sortKey) {
-            case "title_asc":
-                return a.title.localeCompare(b.title);
-            case "title_desc":
-                return b.title.localeCompare(a.title);
-            case "author_asc":
-                return a.author_names.localeCompare(b.author_names);
-            case "rating_desc":
-                return (b.personal_rating ?? -1) - (a.personal_rating ?? -1);
-            case "year_desc":
-                return (
-                    (b.publication_year ?? -Infinity) -
-                    (a.publication_year ?? -Infinity)
-                );
-            case "year_asc":
-                return (
-                    (a.publication_year ?? Infinity) -
-                    (b.publication_year ?? Infinity)
-                );
-            case "status":
-                return (
-                    statusSortValue[a.derived_status] -
-                    statusSortValue[b.derived_status]
-                );
-            case "updated_desc":
-            default:
-                return (
-                    new Date(b.updated_at).getTime() -
-                    new Date(a.updated_at).getTime()
-                );
-        }
-    });
-
-    return next;
-}
-
-function buildPagination(currentPage: number, totalPages: number) {
-    if (totalPages <= 7) {
-        return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-
-    if (currentPage <= 3) {
-        return [1, 2, 3, 4, "ellipsis", totalPages] as const;
-    }
-
-    if (currentPage >= totalPages - 2) {
-        return [
-            1,
-            "ellipsis",
-            totalPages - 3,
-            totalPages - 2,
-            totalPages - 1,
-            totalPages,
-        ] as const;
-    }
-
-    return [
-        1,
-        "ellipsis",
-        currentPage - 1,
-        currentPage,
-        currentPage + 1,
-        "ellipsis",
-        totalPages,
-    ] as const;
-}
 
 export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
     const [books, setBooks] = useState(initialBooks);
@@ -188,6 +57,7 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         selectedList,
         sortKey,
         pageSize,
+        ownership,
     ]);
 
     const allTags = useMemo(() => {
@@ -230,9 +100,7 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
 
         if (author) {
             const needle = author.toLowerCase();
-            next = next.filter((b) =>
-                b.author_names.toLowerCase().includes(needle),
-            );
+            next = next.filter((b) => b.author_names.toLowerCase().includes(needle));
         }
 
         if (series) {
@@ -247,9 +115,7 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         }
 
         if (selectedTag) {
-            next = next.filter((b) =>
-                b.tags?.some((t: Tag) => t.name === selectedTag),
-            );
+            next = next.filter((b) => b.tags?.some((t: Tag) => t.name === selectedTag));
         }
 
         if (ownership === "owned") {
@@ -292,18 +158,8 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
     function bookInList(bookId: string, listId: string) {
         return listMemberships.some(
             (membership) =>
-                membership.custom_list_id === listId &&
-                membership.book_id === bookId,
+                membership.custom_list_id === listId && membership.book_id === bookId,
         );
-    }
-
-    function buildExportText() {
-        return `${selectedListName}\n\n${filtered
-            .map(
-                (book) =>
-                    `'${book.title}' by ${book.author_names || "Unknown author"}`,
-            )
-            .join("\n")}`;
     }
 
     async function exportCurrentList() {
@@ -314,7 +170,10 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
             return;
         }
 
-        const text = buildExportText();
+        const titles = filtered.map(
+            (book) => `'${book.title}' by ${book.author_names || "Unknown author"}`,
+        );
+        const text = buildExportText(selectedListName, titles);
 
         const canUseNativeShare =
             typeof navigator !== "undefined" &&
@@ -472,8 +331,7 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
             console.error(error);
             setListMemberships((prev) =>
                 prev.filter(
-                    (m) =>
-                        !(m.custom_list_id === listId && m.book_id === bookId),
+                    (m) => !(m.custom_list_id === listId && m.book_id === bookId),
                 ),
             );
             toast.error("Could not add book to list");
@@ -493,18 +351,13 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         const priorMemberships = listMemberships;
         setMembershipPending((prev) => ({ ...prev, [key]: true }));
         setListMemberships((prev) =>
-            prev.filter(
-                (m) => !(m.custom_list_id === listId && m.book_id === bookId),
-            ),
+            prev.filter((m) => !(m.custom_list_id === listId && m.book_id === bookId)),
         );
 
         try {
-            const response = await fetch(
-                `/api/custom-lists/${listId}/books/${bookId}`,
-                {
-                    method: "DELETE",
-                },
-            );
+            const response = await fetch(`/api/custom-lists/${listId}/books/${bookId}`, {
+                method: "DELETE",
+            });
 
             if (!response.ok) {
                 throw new Error("Failed to remove book from list.");
@@ -524,633 +377,114 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
 
     return (
         <div className="grid gap-6">
-            <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                    <CardTitle>Search and filters</CardTitle>
-                </CardHeader>
-
-                <CardContent>
-                    <div className="flex flex-wrap items-end gap-3">
-                        <div className="min-w-[260px] flex-[2_1_420px]">
-                            <Input
-                                placeholder="Search title or author"
-                                value={q}
-                                onChange={(e) => setQ(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="min-w-[180px] flex-[1_1_220px]">
-                            <Input
-                                placeholder="Filter author"
-                                value={author}
-                                onChange={(e) => setAuthor(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="min-w-[180px] flex-[1_1_220px]">
-                            <Input
-                                placeholder="Filter series"
-                                value={series}
-                                onChange={(e) => setSeries(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="min-w-[160px] flex-[1_1_180px]">
-                            <select
-                                value={status}
-                                onChange={(e) => setStatus(e.target.value)}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                <option value="">Any status</option>
-                                <option value="unread">Unread</option>
-                                <option value="reading">Reading</option>
-                                <option value="read">Read</option>
-                            </select>
-                        </div>
-
-                        <div className="min-w-[160px] flex-[1_1_180px]">
-                            <select
-                                value={ownership}
-                                onChange={(e) => setOwnership(e.target.value)}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                <option value="">Any ownership</option>
-                                <option value="owned">Owned</option>
-                                <option value="not_owned">Not owned</option>
-                            </select>
-                        </div>
-
-                        <div className="min-w-[160px] flex-[1_1_180px]">
-                            <select
-                                value={selectedTag}
-                                onChange={(e) => setSelectedTag(e.target.value)}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                <option value="">Any tag</option>
-                                {allTags.map((tag) => (
-                                    <option key={tag.id} value={tag.name}>
-                                        {tag.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="min-w-[180px] flex-[1_1_220px]">
-                            <select
-                                value={sortKey}
-                                onChange={(e) =>
-                                    setSortKey(e.target.value as SortKey)
-                                }
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                <option value="updated_desc">
-                                    Recently updated
-                                </option>
-                                <option value="title_asc">Title A–Z</option>
-                                <option value="title_desc">Title Z–A</option>
-                                <option value="author_asc">Author A–Z</option>
-                                <option value="rating_desc">
-                                    Highest rated
-                                </option>
-                                <option value="year_desc">
-                                    Newest publication year
-                                </option>
-                                <option value="year_asc">
-                                    Oldest publication year
-                                </option>
-                                <option value="status">Status</option>
-                            </select>
-                        </div>
-
-                        <div className="flex-[0_0_auto]">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => {
-                                    setQ("");
-                                    setAuthor("");
-                                    setSeries("");
-                                    setStatus("");
-                                    setSelectedTag("");
-                                    setSelectedList("all");
-                                    setSortKey("updated_desc");
-                                    setPage(1);
-                                    setOwnership("");
-                                }}>
-                                Clear
-                            </Button>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            <BookshelfFiltersCard
+                q={q}
+                author={author}
+                series={series}
+                status={status}
+                ownership={ownership}
+                selectedTag={selectedTag}
+                sortKey={sortKey}
+                allTags={allTags}
+                onQChange={setQ}
+                onAuthorChange={setAuthor}
+                onSeriesChange={setSeries}
+                onStatusChange={setStatus}
+                onOwnershipChange={setOwnership}
+                onTagChange={setSelectedTag}
+                onSortChange={setSortKey}
+                onClear={() => {
+                    setQ("");
+                    setAuthor("");
+                    setSeries("");
+                    setStatus("");
+                    setSelectedTag("");
+                    setSelectedList("all");
+                    setSortKey("updated_desc");
+                    setPage(1);
+                    setOwnership("");
+                }}
+            />
 
             <Card className="rounded-3xl shadow-sm">
-                <CardHeader className="gap-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <CardTitle>Books</CardTitle>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={exportCurrentList}
-                                disabled={filtered.length === 0}>
-                                <Share2 className="mr-2 h-4 w-4" />
-                                Export
-                            </Button>
-
-                            <select
-                                value={pageSize}
-                                onChange={(e) =>
-                                    setPageSize(Number(e.target.value))
-                                }
-                                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                {PAGE_SIZE_OPTIONS.map((size) => (
-                                    <option key={size} value={size}>
-                                        {size} per page
-                                    </option>
-                                ))}
-                            </select>
-
-                            {selectedList !== "all" ? (
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    onClick={deleteSelectedList}
-                                    disabled={listActionPending}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete list
-                                </Button>
-                            ) : null}
-                        </div>
-                    </div>
-
-                    <div className="rounded-3xl border bg-card/60 p-3 shadow-sm">
-                        <div className="flex items-start gap-3">
-                            <div className="min-w-0 flex-1 overflow-hidden">
-                                <Tabs
-                                    value={selectedList}
-                                    onValueChange={setSelectedList}>
-                                    <div className="overflow-x-auto pb-1">
-                                        <TabsList className="inline-flex h-auto min-w-max gap-2 rounded-2xl bg-transparent p-0">
-                                            <TabsTrigger
-                                                value="all"
-                                                className="rounded-full border data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                                                All books
-                                            </TabsTrigger>
-
-                                            {customLists.map((list) => (
-                                                <TabsTrigger
-                                                    key={list.id}
-                                                    value={list.id}
-                                                    className="rounded-full border data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                                                    {list.name}
-                                                </TabsTrigger>
-                                            ))}
-                                        </TabsList>
-                                    </div>
-                                </Tabs>
-                            </div>
-
-                            <div className="shrink-0 pl-1">
-                                <Button
-                                    type="button"
-                                    size="icon"
-                                    className="rounded-full"
-                                    onClick={() =>
-                                        setShowCreateList((prev) => !prev)
-                                    }
-                                    aria-label="Create list">
-                                    <Plus className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </div>
-
-                        {showCreateList ? (
-                            <div className="mt-3 flex flex-col gap-2 rounded-2xl border bg-background/70 p-3 sm:flex-row">
-                                <Input
-                                    value={newListName}
-                                    onChange={(e) =>
-                                        setNewListName(e.target.value)
-                                    }
-                                    placeholder="New list name"
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                            void createList();
-                                        }
-                                    }}
-                                />
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        onClick={() => void createList()}
-                                        disabled={
-                                            !newListName.trim() ||
-                                            listActionPending
-                                        }>
-                                        Create list
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => {
-                                            setShowCreateList(false);
-                                            setNewListName("");
-                                        }}>
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-sm font-medium">
-                                    Current list: {selectedListName}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    {filtered.length} matching book
-                                    {filtered.length === 1 ? "" : "s"}
-                                    {selectedList !== "all"
-                                        ? ` in ${selectedListName}`
-                                        : ""}
-                                </p>
-                            </div>
-
-                            {filtered.length > 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    Showing {startIndex + 1}–
-                                    {Math.min(
-                                        startIndex + pageSize,
-                                        filtered.length,
-                                    )}{" "}
-                                    of {filtered.length}
-                                </p>
-                            ) : null}
-                        </div>
-                    </div>
-                </CardHeader>
+                <BookshelfListHeader
+                    filteredCount={filtered.length}
+                    selectedList={selectedList}
+                    selectedListName={selectedListName}
+                    startIndex={startIndex}
+                    pageSize={pageSize}
+                    customLists={customLists}
+                    showCreateList={showCreateList}
+                    newListName={newListName}
+                    listActionPending={listActionPending}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    onExport={() => void exportCurrentList()}
+                    onPageSizeChange={setPageSize}
+                    onDeleteSelectedList={() => void deleteSelectedList()}
+                    onSelectedListChange={setSelectedList}
+                    onToggleCreateList={() => setShowCreateList((prev) => !prev)}
+                    onNewListNameChange={setNewListName}
+                    onCreateList={() => void createList()}
+                    onCancelCreateList={() => {
+                        setShowCreateList(false);
+                        setNewListName("");
+                    }}
+                />
 
                 <CardContent>
-                    {selectedListIsEmpty ? (
-                        <div className="rounded-3xl border border-dashed p-8 text-center">
-                            <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-                                <div className="rounded-full bg-muted p-3">
-                                    <ListPlus className="h-5 w-5" />
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-base font-medium">
-                                        This list is empty
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Add books directly from the cards below
-                                        while browsing All books, or clear your
-                                        filters to find books faster.
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => setSelectedList("all")}>
-                                    Browse all books
-                                </Button>
-                            </div>
-                        </div>
-                    ) : paginated.length ? (
-                        <div className="grid gap-3">
-                            {paginated.map((book) => {
-                                const style = statusStyles[book.derived_status];
-                                const statusCopy = getStatusCopy(book);
-                                const inSelectedList =
-                                    selectedList !== "all"
-                                        ? bookInList(book.id, selectedList)
-                                        : false;
-
-                                return (
-                                    <div
-                                        key={book.id}
-                                        className={`flex overflow-hidden rounded-2xl border ${style.bg}`}>
-                                        <div
-                                            className={`w-1.5 shrink-0 ${style.bar}`}
-                                            aria-hidden="true"
-                                        />
-
-                                        <div className="flex-1 p-4">
-                                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                                                <div className="space-y-3">
-                                                    <div className="space-y-1">
-                                                        <p className="text-xl font-medium flex items-center">
-                                                            {book.title}
-                                                            <span
-                                                                className={`rounded-full shadow ml-4 px-2.5 py-1 text-sm font-medium ${
-                                                                    book.owned
-                                                                        ? "bg-sky-100 text-sky-700"
-                                                                        : "bg-slate-100 text-slate-600"
-                                                                }`}>
-                                                                {book.owned
-                                                                    ? "Owned"
-                                                                    : "Not owned"}
-                                                            </span>
-                                                        </p>
-                                                        <p
-                                                            className={`text-xs font-medium ${style.text}`}>
-                                                            {statusCopy}
-                                                        </p>
-                                                    </div>
-
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {book.author_names ||
-                                                            "Unknown author"}
-                                                        {book.publication_year
-                                                            ? `, ${book.publication_year}`
-                                                            : ""}
-                                                    </p>
-
-                                                    {book.series_name ? (
-                                                        <p className="text-sm text-muted-foreground">
-                                                            Series:{" "}
-                                                            {book.series_name}
-                                                        </p>
-                                                    ) : null}
-
-                                                    <StarRating
-                                                        rating={
-                                                            book.personal_rating
-                                                        }
-                                                    />
-
-                                                    {book.tags?.length ? (
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {book.tags.map(
-                                                                (tag: Tag) => (
-                                                                    <span
-                                                                        key={
-                                                                            tag.id
-                                                                        }
-                                                                        className="rounded-full px-2.5 py-1 text-xs"
-                                                                        style={{
-                                                                            backgroundColor:
-                                                                                tag.color,
-                                                                            color: "#111827",
-                                                                        }}>
-                                                                        {
-                                                                            tag.name
-                                                                        }
-                                                                    </span>
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-
-                                                <div className="flex w-full flex-col gap-2 xl:w-auto xl:min-w-[320px] xl:items-end">
-                                                    <div className="flex flex-wrap gap-2 xl:justify-end">
-                                                        <Button
-                                                            asChild
-                                                            variant="secondary">
-                                                            <Link
-                                                                href={`/books/${book.id}/edit`}>
-                                                                Edit
-                                                            </Link>
-                                                        </Button>
-
-                                                        <StatusMenu
-                                                            bookId={book.id}
-                                                            status={
-                                                                book.derived_status
-                                                            }
-                                                            onStatusChange={(
-                                                                next,
-                                                            ) => {
-                                                                setBooks(
-                                                                    (prev) =>
-                                                                        prev.map(
-                                                                            (
-                                                                                b,
-                                                                            ) =>
-                                                                                b.id ===
-                                                                                book.id
-                                                                                    ? {
-                                                                                          ...b,
-                                                                                          derived_status:
-                                                                                              next,
-                                                                                          reread_count:
-                                                                                              next ===
-                                                                                                  "read" &&
-                                                                                              b.derived_status ===
-                                                                                                  "read"
-                                                                                                  ? b.reread_count +
-                                                                                                    1
-                                                                                                  : next ===
-                                                                                                      "unread"
-                                                                                                    ? 0
-                                                                                                    : b.reread_count,
-                                                                                      }
-                                                                                    : b,
-                                                                        ),
-                                                                );
-                                                            }}
-                                                        />
-                                                    </div>
-
-                                                    {selectedList === "all" ? (
-                                                        <div className="rounded-2xl border bg-background/70 p-3">
-                                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
-                                                                Add to list
-                                                            </p>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {customLists.length ? (
-                                                                    customLists.map(
-                                                                        (
-                                                                            list,
-                                                                        ) => {
-                                                                            const included =
-                                                                                bookInList(
-                                                                                    book.id,
-                                                                                    list.id,
-                                                                                );
-                                                                            const pending =
-                                                                                membershipPending[
-                                                                                    `${list.id}:${book.id}`
-                                                                                ];
-
-                                                                            return (
-                                                                                <Button
-                                                                                    key={
-                                                                                        list.id
-                                                                                    }
-                                                                                    type="button"
-                                                                                    size="sm"
-                                                                                    variant={
-                                                                                        included
-                                                                                            ? "secondary"
-                                                                                            : "outline"
-                                                                                    }
-                                                                                    disabled={
-                                                                                        included ||
-                                                                                        pending
-                                                                                    }
-                                                                                    onClick={() =>
-                                                                                        void addBookToList(
-                                                                                            book.id,
-                                                                                            list.id,
-                                                                                        )
-                                                                                    }
-                                                                                    className="rounded-full">
-                                                                                    {included
-                                                                                        ? `${list.name} added`
-                                                                                        : `Add to ${list.name}`}
-                                                                                </Button>
-                                                                            );
-                                                                        },
-                                                                    )
-                                                                ) : (
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        Create a
-                                                                        custom
-                                                                        list to
-                                                                        start
-                                                                        organising
-                                                                        books.
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="rounded-2xl border bg-background/70 p-3">
-                                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
-                                                                List actions
-                                                            </p>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {inSelectedList ? (
-                                                                    <Button
-                                                                        type="button"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() =>
-                                                                            void removeBookFromList(
-                                                                                book.id,
-                                                                                selectedList,
-                                                                            )
-                                                                        }
-                                                                        disabled={
-                                                                            membershipPending[
-                                                                                `${selectedList}:${book.id}`
-                                                                            ]
-                                                                        }>
-                                                                        <X className="mr-2 h-4 w-4" />
-                                                                        Remove
-                                                                        from{" "}
-                                                                        {
-                                                                            selectedListName
-                                                                        }
-                                                                    </Button>
-                                                                ) : (
-                                                                    <Button
-                                                                        type="button"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() =>
-                                                                            void addBookToList(
-                                                                                book.id,
-                                                                                selectedList,
-                                                                            )
-                                                                        }
-                                                                        disabled={
-                                                                            membershipPending[
-                                                                                `${selectedList}:${book.id}`
-                                                                            ]
-                                                                        }>
-                                                                        <Plus className="mr-2 h-4 w-4" />
-                                                                        Add to{" "}
-                                                                        {
-                                                                            selectedListName
-                                                                        }
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            No books match this filter.
-                        </p>
-                    )}
-
-                    {filtered.length > 0 ? (
-                        <div className="mt-6 border-t pt-4">
-                            <Pagination>
-                                <PaginationContent>
-                                    <PaginationItem>
-                                        <PaginationPrevious
-                                            href="#"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                setPage((prev) =>
-                                                    Math.max(1, prev - 1),
-                                                );
-                                            }}
-                                            className={
-                                                currentPage <= 1
-                                                    ? "pointer-events-none opacity-50"
-                                                    : "cursor-pointer"
-                                            }
-                                        />
-                                    </PaginationItem>
-
-                                    {paginationItems.map((item, index) => {
-                                        if (item === "ellipsis") {
-                                            return (
-                                                <PaginationItem
-                                                    key={`ellipsis-${index}`}>
-                                                    <PaginationEllipsis />
-                                                </PaginationItem>
-                                            );
-                                        }
-
-                                        return (
-                                            <PaginationItem key={item}>
-                                                <PaginationLink
-                                                    href="#"
-                                                    isActive={
-                                                        currentPage === item
-                                                    }
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        setPage(item);
-                                                    }}>
-                                                    {item}
-                                                </PaginationLink>
-                                            </PaginationItem>
-                                        );
-                                    })}
-
-                                    <PaginationItem>
-                                        <PaginationNext
-                                            href="#"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                setPage((prev) =>
-                                                    Math.min(
-                                                        totalPages,
-                                                        prev + 1,
-                                                    ),
-                                                );
-                                            }}
-                                            className={
-                                                currentPage >= totalPages
-                                                    ? "pointer-events-none opacity-50"
-                                                    : "cursor-pointer"
-                                            }
-                                        />
-                                    </PaginationItem>
-                                </PaginationContent>
-                            </Pagination>
-                        </div>
-                    ) : null}
+                    <BookshelfBooksList
+                        books={paginated}
+                        customLists={customLists}
+                        selectedList={selectedList}
+                        selectedListName={selectedListName}
+                        selectedListIsEmpty={selectedListIsEmpty}
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        paginationItems={paginationItems}
+                        membershipPending={membershipPending}
+                        onPageChange={setPage}
+                        onStatusChange={(bookId, next) => {
+                            setBooks((prev) =>
+                                prev.map((book) =>
+                                    book.id === bookId
+                                        ? {
+                                              ...book,
+                                              derived_status: next,
+                                              read:
+                                                  next === "unread"
+                                                      ? false
+                                                      : next === "read"
+                                                        ? true
+                                                        : book.read ||
+                                                          book.derived_status ===
+                                                              "read",
+                                              reread_count:
+                                                  next === "unread"
+                                                      ? 0
+                                                      : next === "read"
+                                                        ? book.read ||
+                                                            book.derived_status ===
+                                                                "read" ||
+                                                            book.reread_count >
+                                                                0
+                                                          ? book.reread_count +
+                                                            1
+                                                          : 0
+                                                        : book.reread_count,
+                                          }
+                                        : book,
+                                ),
+                            );
+                        }}
+                        onBookInList={bookInList}
+                        onAddBookToList={(bookId, listId) =>
+                            void addBookToList(bookId, listId)
+                        }
+                        onRemoveBookFromList={(bookId, listId) =>
+                            void removeBookFromList(bookId, listId)
+                        }
+                        onBrowseAllBooks={() => setSelectedList("all")}
+                    />
                 </CardContent>
             </Card>
         </div>

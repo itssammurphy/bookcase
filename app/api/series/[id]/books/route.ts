@@ -1,20 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { jsonError, requireApiUser } from "@/lib/api/route";
 
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
     const { id: seriesId } = await params;
-    const { bookId } = await request.json();
+    const body = await request.json();
+    const bookId = String(body?.bookId ?? "").trim();
 
-    const supabase = await createServerSupabaseClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    if (!bookId) {
+        return jsonError("bookId is required.", 400);
+    }
 
-    if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireApiUser();
+    if (auth.response) return auth.response;
+
+    const { supabase, user } = auth;
+
+    const [{ data: series, error: seriesError }, { data: book, error: bookError }] =
+        await Promise.all([
+            supabase
+                .from("series")
+                .select("id")
+                .eq("id", seriesId)
+                .eq("user_id", user.id)
+                .maybeSingle(),
+            supabase
+                .from("books")
+                .select("id")
+                .eq("id", bookId)
+                .eq("user_id", user.id)
+                .maybeSingle(),
+        ]);
+
+    if (seriesError) {
+        return jsonError(seriesError.message, 500);
+    }
+
+    if (bookError) {
+        return jsonError(bookError.message, 500);
+    }
+
+    if (!series) {
+        return jsonError("Series not found.", 404);
+    }
+
+    if (!book) {
+        return jsonError("Book not found.", 404);
     }
 
     const { data: existing } = await supabase
@@ -35,7 +68,7 @@ export async function POST(
     });
 
     if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+        return jsonError(error.message, 400);
     }
 
     await supabase
