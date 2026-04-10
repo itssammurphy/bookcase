@@ -11,7 +11,23 @@ import { ReadStatus, SeriesEntry } from "@/types/types";
 type Props = {
     seriesId: string;
     initialEntries: SeriesEntry[];
-    addableBooks: any[];
+    addableBooks: Array<{
+        id: string;
+        title: string;
+        author_names: string;
+        publication_year: number | null;
+        derived_status: ReadStatus;
+        reread_count: number;
+    }>;
+};
+
+type AddBookResponse = {
+    ok: boolean;
+    entry?: {
+        id: string;
+        book_id: string;
+        chronology_index: number;
+    };
 };
 
 const statusStyles: Record<
@@ -95,6 +111,22 @@ export function SeriesDetailClient({
             });
 
             if (!res.ok) return;
+
+            const payload = (await res.json()) as AddBookResponse;
+            const insertedEntry = payload.entry;
+            const selectedBook = addableBooks.find((book) => book.id === bookId);
+
+            if (insertedEntry && selectedBook) {
+                setEntries((prev) => [
+                    ...prev,
+                    {
+                        id: insertedEntry.id,
+                        book_id: insertedEntry.book_id,
+                        chronology_index: insertedEntry.chronology_index,
+                        book: selectedBook,
+                    },
+                ]);
+            }
 
             setQuery("");
             router.refresh();

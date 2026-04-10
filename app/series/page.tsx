@@ -109,7 +109,6 @@ export default async function SeriesPage() {
         .from("series_progress")
         .select("*")
         .eq("user_id", user.id)
-        .gt("total_required_books", 0)
         .order("series_name", { ascending: true })
         .returns<SeriesProgressRow[]>();
 

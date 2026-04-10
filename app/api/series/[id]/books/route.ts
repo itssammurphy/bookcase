@@ -60,12 +60,16 @@ export async function POST(
 
     const nextIndex = (existing?.[0]?.chronology_index ?? 0) + 1;
 
-    const { error } = await supabase.from("series_books").insert({
-        user_id: user.id,
-        series_id: seriesId,
-        book_id: bookId,
-        chronology_index: nextIndex,
-    });
+    const { data: insertedEntry, error } = await supabase
+        .from("series_books")
+        .insert({
+            user_id: user.id,
+            series_id: seriesId,
+            book_id: bookId,
+            chronology_index: nextIndex,
+        })
+        .select("id, book_id, chronology_index")
+        .single();
 
     if (error) {
         return jsonError(error.message, 400);
@@ -77,5 +81,5 @@ export async function POST(
         .eq("id", bookId)
         .eq("user_id", user.id);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, entry: insertedEntry });
 }
