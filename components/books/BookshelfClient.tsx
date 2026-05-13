@@ -100,7 +100,7 @@ function normalizeBooks(incoming: BookRow[]): BookRow[] {
                       if (link.tag_id) return { id: link.tag_id };
                       return null;
                   })
-                  .filter((value): value is unknown => value !== null)
+                  .filter((value): value is any => value !== null)
             : [];
 
         const normalized = normalizeBookTags(
