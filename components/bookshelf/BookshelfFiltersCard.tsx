@@ -113,21 +113,32 @@ export function BookshelfFiltersCard({
                     <div className="min-w-[180px] flex-[1_1_220px]">
                         <select
                             value={sortKey}
-                            onChange={(e) => onSortChange(e.target.value as SortKey)}
+                            onChange={(e) =>
+                                onSortChange(e.target.value as SortKey)
+                            }
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                            <option value="updated_desc">Recently updated</option>
+                            <option value="updated_desc">
+                                Recently updated
+                            </option>
                             <option value="title_asc">Title A–Z</option>
                             <option value="title_desc">Title Z–A</option>
                             <option value="author_asc">Author A–Z</option>
                             <option value="rating_desc">Highest rated</option>
-                            <option value="year_desc">Newest publication year</option>
-                            <option value="year_asc">Oldest publication year</option>
+                            <option value="year_desc">
+                                Newest publication year
+                            </option>
+                            <option value="year_asc">
+                                Oldest publication year
+                            </option>
                             <option value="status">Status</option>
                         </select>
                     </div>
 
                     <div className="flex-[0_0_auto]">
-                        <Button type="button" variant="secondary" onClick={onClear}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={onClear}>
                             Clear
                         </Button>
                     </div>

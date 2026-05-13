@@ -15,6 +15,105 @@ import {
 } from "@/components/bookshelf/bookshelfUtils";
 import { BookRow, CustomList, Membership, Tag } from "@/types/types";
 
+type RawTag = {
+    id?: string;
+    name?: string;
+    color?: string;
+    tag_id?: string;
+    tag_name?: string;
+    tag_color?: string;
+    label?: string;
+};
+
+type RawBookTagLink = {
+    tag_id?: string;
+    tags?: unknown;
+};
+
+type BookWithTagVariants = BookRow & {
+    tags?: unknown;
+    book_tags?: unknown;
+};
+
+function normalizeBookTags(rawTags: unknown): Tag[] {
+    const parsed =
+        typeof rawTags === "string"
+            ? (() => {
+                  try {
+                      return JSON.parse(rawTags) as unknown;
+                  } catch {
+                      return [];
+                  }
+              })()
+            : rawTags;
+
+    const candidates = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object"
+          ? [parsed]
+          : [];
+
+    return candidates
+        .map((raw): Tag | null => {
+            if (typeof raw === "string") {
+                const name = raw.trim();
+                if (!name) return null;
+                return {
+                    id: `name:${name.toLowerCase()}`,
+                    name,
+                    color: "#e5e7eb",
+                };
+            }
+
+            if (!raw || typeof raw !== "object") return null;
+
+            const candidate = raw as RawTag;
+            const name =
+                candidate.name ?? candidate.tag_name ?? candidate.label;
+            if (!name) return null;
+
+            const id =
+                candidate.id ??
+                candidate.tag_id ??
+                `name:${name.toLowerCase()}`;
+
+            return {
+                id,
+                name,
+                color: candidate.color ?? candidate.tag_color ?? "#e5e7eb",
+            };
+        })
+        .filter((tag): tag is Tag => tag !== null);
+}
+
+function normalizeBooks(incoming: BookRow[]): BookRow[] {
+    return incoming.map((book) => {
+        const source = book as BookWithTagVariants;
+
+        const tagsFromBookTags = Array.isArray(source.book_tags)
+            ? source.book_tags
+                  .map((entry) => {
+                      if (!entry || typeof entry !== "object") return null;
+                      const link = entry as RawBookTagLink;
+
+                      if (link.tags !== undefined) return link.tags;
+                      if (link.tag_id) return { id: link.tag_id };
+                      return null;
+                  })
+                  .filter((value): value is unknown => value !== null)
+            : [];
+
+        const normalized = normalizeBookTags(
+            tagsFromBookTags.length > 0 ? tagsFromBookTags : source.tags,
+        );
+
+        return {
+            ...book,
+            tags: normalized,
+        };
+    });
+}
+
 type Props = {
     initialBooks: BookRow[];
     lists: CustomList[];
@@ -22,7 +121,7 @@ type Props = {
 };
 
 export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
-    const [books, setBooks] = useState(initialBooks);
+    const [books, setBooks] = useState(() => normalizeBooks(initialBooks));
     const [customLists, setCustomLists] = useState(
         [...lists].sort((a, b) => a.sort_order - b.sort_order),
     );
@@ -45,6 +144,10 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
     const [membershipPending, setMembershipPending] = useState<
         Record<string, boolean>
     >({});
+
+    useEffect(() => {
+        setBooks(normalizeBooks(initialBooks));
+    }, [initialBooks]);
 
     useEffect(() => {
         setPage(1);
@@ -100,7 +203,9 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
 
         if (author) {
             const needle = author.toLowerCase();
-            next = next.filter((b) => b.author_names.toLowerCase().includes(needle));
+            next = next.filter((b) =>
+                b.author_names.toLowerCase().includes(needle),
+            );
         }
 
         if (series) {
@@ -115,7 +220,9 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         }
 
         if (selectedTag) {
-            next = next.filter((b) => b.tags?.some((t: Tag) => t.name === selectedTag));
+            next = next.filter((b) =>
+                b.tags?.some((t: Tag) => t.name === selectedTag),
+            );
         }
 
         if (ownership === "owned") {
@@ -158,7 +265,8 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
     function bookInList(bookId: string, listId: string) {
         return listMemberships.some(
             (membership) =>
-                membership.custom_list_id === listId && membership.book_id === bookId,
+                membership.custom_list_id === listId &&
+                membership.book_id === bookId,
         );
     }
 
@@ -171,7 +279,8 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         }
 
         const titles = filtered.map(
-            (book) => `'${book.title}' by ${book.author_names || "Unknown author"}`,
+            (book) =>
+                `'${book.title}' by ${book.author_names || "Unknown author"}`,
         );
         const text = buildExportText(selectedListName, titles);
 
@@ -331,7 +440,8 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
             console.error(error);
             setListMemberships((prev) =>
                 prev.filter(
-                    (m) => !(m.custom_list_id === listId && m.book_id === bookId),
+                    (m) =>
+                        !(m.custom_list_id === listId && m.book_id === bookId),
                 ),
             );
             toast.error("Could not add book to list");
@@ -351,13 +461,18 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
         const priorMemberships = listMemberships;
         setMembershipPending((prev) => ({ ...prev, [key]: true }));
         setListMemberships((prev) =>
-            prev.filter((m) => !(m.custom_list_id === listId && m.book_id === bookId)),
+            prev.filter(
+                (m) => !(m.custom_list_id === listId && m.book_id === bookId),
+            ),
         );
 
         try {
-            const response = await fetch(`/api/custom-lists/${listId}/books/${bookId}`, {
-                method: "DELETE",
-            });
+            const response = await fetch(
+                `/api/custom-lists/${listId}/books/${bookId}`,
+                {
+                    method: "DELETE",
+                },
+            );
 
             if (!response.ok) {
                 throw new Error("Failed to remove book from list.");
@@ -422,7 +537,9 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
                     onPageSizeChange={setPageSize}
                     onDeleteSelectedList={() => void deleteSelectedList()}
                     onSelectedListChange={setSelectedList}
-                    onToggleCreateList={() => setShowCreateList((prev) => !prev)}
+                    onToggleCreateList={() =>
+                        setShowCreateList((prev) => !prev)
+                    }
                     onNewListNameChange={setNewListName}
                     onCreateList={() => void createList()}
                     onCancelCreateList={() => {
@@ -463,13 +580,12 @@ export function BookshelfClient({ initialBooks, lists, memberships }: Props) {
                                                       ? 0
                                                       : next === "read"
                                                         ? book.read ||
-                                                            book.derived_status ===
-                                                                "read" ||
-                                                            book.reread_count >
-                                                                0
-                                                          ? book.reread_count +
-                                                            1
-                                                          : 0
+                                                          book.derived_status ===
+                                                              "read" ||
+                                                          book.reread_count > 0
+                                                            ? book.reread_count +
+                                                              1
+                                                            : 0
                                                         : book.reread_count,
                                           }
                                         : book,

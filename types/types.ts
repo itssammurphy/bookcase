@@ -52,6 +52,7 @@ export type BookRow = {
     owned: boolean;
     author_names: string;
     tags: Tag[];
+    book_tags: Tag[];
     derived_status: "unread" | "reading" | "read";
     reread_count: number;
     series_id: string | null;

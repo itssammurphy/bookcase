@@ -57,13 +57,19 @@ export function BookshelfBooksList({
                         <ListPlus className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
-                        <p className="text-base font-medium">This list is empty</p>
+                        <p className="text-base font-medium">
+                            This list is empty
+                        </p>
                         <p className="text-sm text-muted-foreground">
-                            Add books directly from the cards below while browsing
-                            All books, or clear your filters to find books faster.
+                            Add books directly from the cards below while
+                            browsing All books, or clear your filters to find
+                            books faster.
                         </p>
                     </div>
-                    <Button type="button" variant="secondary" onClick={onBrowseAllBooks}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={onBrowseAllBooks}>
                         Browse all books
                     </Button>
                 </div>
@@ -72,14 +78,20 @@ export function BookshelfBooksList({
     }
 
     if (!books.length) {
-        return <p className="text-sm text-muted-foreground">No books match this filter.</p>;
+        return (
+            <p className="text-sm text-muted-foreground">
+                No books match this filter.
+            </p>
+        );
     }
 
     return (
         <div className="grid gap-3">
             {books.map((book) => {
                 const inSelectedList =
-                    selectedList !== "all" ? onBookInList(book.id, selectedList) : false;
+                    selectedList !== "all"
+                        ? onBookInList(book.id, selectedList)
+                        : false;
 
                 return (
                     <BookCard
@@ -89,13 +101,17 @@ export function BookshelfBooksList({
                         actionArea={
                             <>
                                 <Button asChild variant="secondary">
-                                    <Link href={`/books/${book.id}/edit`}>Edit</Link>
+                                    <Link href={`/books/${book.id}/edit`}>
+                                        Edit
+                                    </Link>
                                 </Button>
 
                                 <StatusMenu
                                     bookId={book.id}
                                     status={book.derived_status}
-                                    onStatusChange={(next) => onStatusChange(book.id, next)}
+                                    onStatusChange={(next) =>
+                                        onStatusChange(book.id, next)
+                                    }
                                 />
                             </>
                         }
@@ -108,9 +124,14 @@ export function BookshelfBooksList({
                                     <div className="flex flex-wrap gap-2">
                                         {customLists.length ? (
                                             customLists.map((list) => {
-                                                const included = onBookInList(book.id, list.id);
+                                                const included = onBookInList(
+                                                    book.id,
+                                                    list.id,
+                                                );
                                                 const pending =
-                                                    membershipPending[`${list.id}:${book.id}`];
+                                                    membershipPending[
+                                                        `${list.id}:${book.id}`
+                                                    ];
 
                                                 return (
                                                     <Button
@@ -118,11 +139,18 @@ export function BookshelfBooksList({
                                                         type="button"
                                                         size="sm"
                                                         variant={
-                                                            included ? "secondary" : "outline"
+                                                            included
+                                                                ? "secondary"
+                                                                : "outline"
                                                         }
-                                                        disabled={included || pending}
+                                                        disabled={
+                                                            included || pending
+                                                        }
                                                         onClick={() =>
-                                                            onAddBookToList(book.id, list.id)
+                                                            onAddBookToList(
+                                                                book.id,
+                                                                list.id,
+                                                            )
                                                         }
                                                         className="rounded-full">
                                                         {included
@@ -133,7 +161,8 @@ export function BookshelfBooksList({
                                             })
                                         ) : (
                                             <p className="text-xs text-muted-foreground">
-                                                Create a custom list to start organising books.
+                                                Create a custom list to start
+                                                organising books.
                                             </p>
                                         )}
                                     </div>
@@ -150,7 +179,10 @@ export function BookshelfBooksList({
                                                 size="sm"
                                                 variant="outline"
                                                 onClick={() =>
-                                                    onRemoveBookFromList(book.id, selectedList)
+                                                    onRemoveBookFromList(
+                                                        book.id,
+                                                        selectedList,
+                                                    )
                                                 }
                                                 disabled={
                                                     membershipPending[
@@ -166,7 +198,10 @@ export function BookshelfBooksList({
                                                 size="sm"
                                                 variant="outline"
                                                 onClick={() =>
-                                                    onAddBookToList(book.id, selectedList)
+                                                    onAddBookToList(
+                                                        book.id,
+                                                        selectedList,
+                                                    )
                                                 }
                                                 disabled={
                                                     membershipPending[
@@ -186,6 +221,10 @@ export function BookshelfBooksList({
             })}
 
             <div className="mt-6 border-t pt-4">
+                <p className="mb-3 text-sm text-muted-foreground">
+                    Showing {books.length}{" "}
+                    {books.length === 1 ? "book" : "books"}
+                </p>
                 <Pagination>
                     <PaginationContent>
                         <PaginationItem>
@@ -232,7 +271,9 @@ export function BookshelfBooksList({
                                 href="#"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    onPageChange(Math.min(totalPages, currentPage + 1));
+                                    onPageChange(
+                                        Math.min(totalPages, currentPage + 1),
+                                    );
                                 }}
                                 className={
                                     currentPage >= totalPages
